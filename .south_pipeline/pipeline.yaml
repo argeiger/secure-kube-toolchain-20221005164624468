@@ -500,8 +500,58 @@ spec:
       workspaces:
         - name: artifacts
           workspace: pipeline-ws
+    - name: deploy-to-kubernetes-2
+      taskRef:
+        name: iks-deploy-to-kubernetes
+      runAfter: [vulnerability-advisor]
+      params:
+        - name: ibmcloud-api
+          value: $(params.ibmcloud-api)
+        - name: shuttle-properties-file
+          value: "build.properties"
+        - name: cluster-region
+          value: $(params.dev-region)
+        - name: resource-group
+          value: $(params.dev-resource-group)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: setup-script
+          value: |
+            export CLUSTER_NAMESPACE="test-hello"
+            export DEPLOYMENT_FILE="$(params.deployment-file)"
+            export KEEP_INGRESS_CUSTOM_DOMAIN="$(params.keep-ingress-custom-domain)"
+            # pipeline build number is the doi build record id (if any)
+            export SOURCE_BUILD_NUMBER=$BUILD_NUMBER
+            echo "SOURCE_BUILD_NUMBER=$BUILD_NUMBER" >> build.properties
+            # For doi plugin invocation if needed
+            export TOOLCHAIN_ID=$PIPELINE_TOOLCHAIN_ID
+        - name: script
+          value: |
+            # uncomment to debug the script
+            # set -x
+            # copy the script below into your app code repo (e.g. ./scripts/check_and_deploy_kubectl.sh) and 'source' it from your pipeline job
+            #    source ./scripts/check_and_deploy_kubectl.sh
+            # alternatively, you can source it from online script:
+            #    source <(curl -sSL "$(params.commons-hosted-region)/scripts/check_and_deploy_helm3.sh")
+            # ------------------
+
+            # This script checks the IBM Container Service cluster is ready, has a namespace configured with access to the private
+            # image registry (using an IBM Cloud API Key), perform a kubectl deploy of container image and check on outcome.
+            
+            source <(curl -sSL "$(params.commons-hosted-region)/scripts/check_and_deploy_kubectl.sh")
+        - name: post-execution-script
+          value: |
+            # Keep APP_URL in build.properties shuttle file
+            echo "APP_URL=$APP_URL" >> build.properties
+            IMAGE="${REGISTRY_URL}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}@${IMAGE_MANIFEST_SHA}"
+            echo "IMAGE=${IMAGE}" >> build.properties
+        - name: pipeline-debug
+          value: $(params.pipeline-debug)
+      workspaces:
+        - name: artifacts
+          workspace: pipeline-ws
     - name: publish-deployable-task
-      runAfter: [deploy-to-kubernetes]
+      runAfter: [deploy-to-kubernetes, deploy-to-kubernetes-2]
       taskRef:
         name: toolchain-publish-deployable-mapping
       params:
